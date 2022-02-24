@@ -1,7 +1,7 @@
 #include "components.h"
 #include "entities.h"
 
-void ECreatePlayer(Scene* scene, f32 x, f32 y)
+usize ECreatePlayer(Scene* scene, f32 x, f32 y)
 {
     usize entity = SceneAllocateEntity(scene);
 
@@ -65,9 +65,11 @@ void ECreatePlayer(Scene* scene, f32 x, f32 y)
             .defaultGravity = defaultGravity
         };
     }
+
+    return entity;
 }
 
-void ECreateBlock(Scene* scene, f32 x, f32 y, f32 width, f32 height)
+usize ECreateBlock(Scene* scene, f32 x, f32 y, f32 width, f32 height)
 {
     usize entity = SceneAllocateEntity(scene);
 
@@ -86,4 +88,6 @@ void ECreateBlock(Scene* scene, f32 x, f32 y, f32 width, f32 height)
         .layer = 1,
         .mask = 0,
     };
+
+    return entity;
 }
