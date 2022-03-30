@@ -379,6 +379,8 @@ void SceneUpdate(Scene* self)
 
     for (usize i = 0; i < SceneGetEntityCount(self); ++i)
     {
+        SFleetingUpdate(self, i);
+
         SSmoothUpdate(self, i);
 
         SPlayerInputUpdate(self, i);
