@@ -384,6 +384,7 @@ void SceneUpdate(Scene* self)
         SSmoothUpdate(self, i);
 
         SPlayerInputUpdate(self, i);
+        SCloudParticleSpawnUpdate(self, i);
 
         SKineticUpdate(self, i);
 
