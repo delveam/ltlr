@@ -10,6 +10,14 @@
 
 typedef struct
 {
+    bool xAxisResolved;
+    bool yAxisResolved;
+} CollisionResult;
+
+#define COLLISION_RESULT_NONE (CollisionResult) { false, false }
+
+typedef struct
+{
     usize entity;
     usize otherEntity;
     Rectangle aabb;
@@ -214,7 +222,7 @@ static bool PlayerIsVulnerable(const CPlayer* player)
     return player->invulnerableTimer >= player->invulnerableDuration;
 }
 
-static bool PlayerOnCollision(Scene* scene, CollisionParams params)
+static CollisionResult PlayerOnCollision(Scene* scene, CollisionParams params)
 {
     assert(ENTITY_HAS_DEPS(params.entity, tagPlayer | tagPosition | tagKinetic));
     assert(ENTITY_HAS_DEPS(params.otherEntity, tagCollider));
@@ -238,7 +246,7 @@ static bool PlayerOnCollision(Scene* scene, CollisionParams params)
                 player->invulnerableTimer = 0;
             }
 
-            return false;
+            return COLLISION_RESULT_NONE;
         }
     }
 
@@ -246,7 +254,7 @@ static bool PlayerOnCollision(Scene* scene, CollisionParams params)
 
     if (resolution.x == 0 && resolution.y == 0)
     {
-        return false;
+        return COLLISION_RESULT_NONE;
     }
 
     Rectangle overlap = GetCollisionRec(params.aabb, params.otherAabb);
@@ -255,12 +263,12 @@ static bool PlayerOnCollision(Scene* scene, CollisionParams params)
     {
         if (resolution.x != 0 && overlap.width > overlap.height)
         {
-            return false;
+            return COLLISION_RESULT_NONE;
         }
 
         if (resolution.y != 0 && overlap.height > overlap.width)
         {
-            return false;
+            return COLLISION_RESULT_NONE;
         }
     }
 
@@ -273,22 +281,22 @@ static bool PlayerOnCollision(Scene* scene, CollisionParams params)
 
         if (resolution.x < 0 && fabsf(offsetLeft) > fabsf(offsetRight))
         {
-            return false;
+            return COLLISION_RESULT_NONE;
         }
 
         if (resolution.x > 0 && fabsf(offsetRight) > fabsf(offsetLeft))
         {
-            return false;
+            return COLLISION_RESULT_NONE;
         }
 
         if (resolution.y < 0 && fabsf(offsetUp) > fabsf(offsetDown))
         {
-            return false;
+            return COLLISION_RESULT_NONE;
         }
 
         if (resolution.y > 0 && fabsf(offsetDown) > fabsf(offsetUp))
         {
-            return false;
+            return COLLISION_RESULT_NONE;
         }
     }
 
@@ -306,9 +314,16 @@ static bool PlayerOnCollision(Scene* scene, CollisionParams params)
                 position->value.x = RectangleRight(params.otherAabb);
             }
 
-            return false;
+            return (CollisionResult)
+            {
+                .xAxisResolved = true,
+                .yAxisResolved = false,
+            };
         }
     }
+
+    bool xAxisResolved = resolution.x != 0;
+    bool yAxisResolved = resolution.y != 0;
 
     // Resolve collision.
     {
@@ -351,11 +366,16 @@ static bool PlayerOnCollision(Scene* scene, CollisionParams params)
         }
     }
 
-    return true;
+    return (CollisionResult)
+    {
+        .xAxisResolved = xAxisResolved,
+        .yAxisResolved = yAxisResolved,
+    };
+
 }
 
 // TODO(thismarvin): Is it possible to have an `OnCollision` callback as a parameter?
-static bool SimulateCollisionOnAxis(Scene* scene, usize entity, Vector2 delta, u8 step)
+static CollisionResult SimulateCollisionOnAxis(Scene* scene, usize entity, Vector2 delta, u8 step)
 {
     // It is important that `delta` only consists of one axis, not both.
     assert(delta.x == 0 || delta.y == 0);
@@ -377,6 +397,9 @@ static bool SimulateCollisionOnAxis(Scene* scene, usize entity, Vector2 delta, u
 
     Vector2 direction = Vector2Create(sign(delta.x), sign(delta.y));
     Vector2 remainder = Vector2Create(fabsf(delta.x), fabsf(delta.y));
+
+    bool xAxisResolved = false;
+    bool yAxisResolved = false;
 
     while (remainder.x > 0 || remainder.y > 0)
     {
@@ -424,17 +447,28 @@ static bool SimulateCollisionOnAxis(Scene* scene, usize entity, Vector2 delta, u
                     .resolution = Vector2Create(-direction.x, -direction.y),
                 };
 
-                bool resolved = PlayerOnCollision(scene, params);
+                CollisionResult result = PlayerOnCollision(scene, params);
 
-                if (resolved)
+                xAxisResolved |= result.xAxisResolved;
+                yAxisResolved |= result.yAxisResolved;
+
+                if ((direction.x != 0 && xAxisResolved) || (direction.y != 0 && yAxisResolved))
                 {
-                    return true;
+                    return (CollisionResult)
+                    {
+                        .xAxisResolved = xAxisResolved,
+                        .yAxisResolved = yAxisResolved,
+                    };
                 }
             }
         }
     }
 
-    return false;
+    return (CollisionResult)
+    {
+        .xAxisResolved = xAxisResolved,
+        .yAxisResolved = yAxisResolved,
+    };
 }
 
 void SPlayerCollisionUpdate(Scene* scene, usize entity)
@@ -474,11 +508,17 @@ void SPlayerCollisionUpdate(Scene* scene, usize entity)
     Vector2 original = position->value;
     position->value = previous;
 
+    bool xAxisResolved = false;
+    bool yAxisResolved = false;
+
     // Resolve collision in the x-axis.
     {
-        bool resolved = SimulateCollisionOnAxis(scene, entity, Vector2Create(delta.x, 0), step);
+        CollisionResult result = SimulateCollisionOnAxis(scene, entity, Vector2Create(delta.x, 0), step);
 
-        if (!resolved)
+        xAxisResolved |= result.xAxisResolved;
+        yAxisResolved |= result.yAxisResolved;
+
+        if (!xAxisResolved)
         {
             position->value.x = original.x;
         }
@@ -486,9 +526,12 @@ void SPlayerCollisionUpdate(Scene* scene, usize entity)
 
     // Resolve collision in the y-axis.
     {
-        bool resolved = SimulateCollisionOnAxis(scene, entity, Vector2Create(0, delta.y), step);
+        CollisionResult result = SimulateCollisionOnAxis(scene, entity, Vector2Create(0, delta.y), step);
 
-        if (!resolved)
+        xAxisResolved |= result.xAxisResolved;
+        yAxisResolved |= result.yAxisResolved;
+
+        if (!yAxisResolved)
         {
             position->value.y = original.y;
         }
