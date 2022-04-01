@@ -396,8 +396,6 @@ void SceneUpdate(Scene* self)
         SCloudParticleCollisionUpdate(self, i);
 
         SGenericCollisionUpdate(self, i);
-
-        SCloudParticleSpawnUpdate(self, i);
     }
 }
 
