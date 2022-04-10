@@ -888,7 +888,20 @@ void SCloudParticleSpawnUpdate(Scene* scene, const usize entity)
             direction.y *= -1;
             f32 directionOffset = (f32)GetRandomValue(DEG2RAD * -45, DEG2RAD * 45);
             direction = Vector2Rotate(direction, directionOffset);
-            ECreateCloudParticle(scene, startingPosition.x, startingPosition.y, direction);
+
+            SceneDeferCreateEntity(scene, (ECreator)
+            {
+                .createFn = ECreateCloudParticle,
+                .context = (ECreatorContext)
+                {
+                    .cloudParticle = (ECloudParticleContext)
+                    {
+                        .centerX = startingPosition.x,
+                        .centerY = startingPosition.y,
+                        .direction = direction
+                    }
+                }
+            });
         }
     }
 }

@@ -3,11 +3,13 @@
 #include "entities.h"
 #include "raymath.h"
 
-usize ECreatePlayer(Scene* scene, const f32 x, const f32 y)
+usize ECreatePlayer(Scene* scene, const ECreatorContext* createContext)
 {
+    const EPlayerContext context = createContext->player;
+
     usize entity = SceneAllocateEntity(scene);
 
-    Vector2 position = Vector2Create(x, y);
+    Vector2 position = Vector2Create(context.x, context.y);
 
     scene->components.tags[entity] = tagPosition | tagDimension | tagColor | tagSprite |
                                      tagKinetic | tagSmooth | tagCollider | tagPlayer | tagMortal;
@@ -76,20 +78,23 @@ usize ECreatePlayer(Scene* scene, const f32 x, const f32 y)
     return entity;
 }
 
-usize ECreateBlock(Scene* scene, const f32 x, const f32 y, const f32 width, const f32 height)
+usize ECreateBlock(Scene* scene, const ECreatorContext* createContext)
 {
+    EBlockContext context = createContext->block;
+
     usize entity = SceneAllocateEntity(scene);
 
-    Vector2 position = Vector2Create(x, y);
+    Vector2 position = Vector2Create(context.x, context.y);
 
     scene->components.tags[entity] = tagPosition | tagDimension | tagCollider;
 
     scene->components.positions[entity].value = position;
     scene->components.dimensions[entity] = (CDimension)
     {
-        .width = width,
-        .height = height
+        .width = context.width,
+        .height = context.height
     };
+
     scene->components.colliders[entity] = (CCollider)
     {
         .layer = layerAll,
@@ -99,11 +104,13 @@ usize ECreateBlock(Scene* scene, const f32 x, const f32 y, const f32 width, cons
     return entity;
 }
 
-usize ECreateWalker(Scene* scene, const f32 x, const f32 y)
+usize ECreateWalker(Scene* scene, const ECreatorContext* createContext)
 {
+    EWalkerContext context = createContext->walker;
+
     usize entity = SceneAllocateEntity(scene);
 
-    Vector2 position = Vector2Create(x, y);
+    Vector2 position = Vector2Create(context.x, context.y);
 
     scene->components.tags[entity] = tagPosition | tagDimension | tagColor | tagSprite |
                                      tagKinetic | tagSmooth | tagCollider | tagWalker | tagDamage;
@@ -145,14 +152,10 @@ usize ECreateWalker(Scene* scene, const f32 x, const f32 y)
     return entity;
 }
 
-usize ECreateCloudParticle
-(
-    Scene* scene,
-    const f32 centerX,
-    const f32 centerY,
-    const Vector2 direction
-)
+usize ECreateCloudParticle(Scene* scene, const ECreatorContext* createContext)
 {
+    ECloudParticleContext context = createContext->cloudParticle;
+
     usize entity = SceneAllocateEntity(scene);
 
     scene->components.tags[entity] = tagPosition | tagDimension | tagColor | tagKinetic | tagSmooth
@@ -162,7 +165,7 @@ usize ECreateCloudParticle
 
     if (GetRandomValue(1, 100) < 25)
     {
-        radius = (f32) GetRandomValue(4, 5);
+        radius = (f32)GetRandomValue(4, 5);
     }
     else
     {
@@ -175,7 +178,7 @@ usize ECreateCloudParticle
         .height = radius * 2,
     };
 
-    Vector2 position = Vector2Create(centerX - radius, centerY - radius);
+    Vector2 position = Vector2Create(context.centerX - radius, context.centerY - radius);
     scene->components.positions[entity] = (CPosition)
     {
         .value = position,
@@ -192,7 +195,7 @@ usize ECreateCloudParticle
     f32 speed = (f32)GetRandomValue(5, 15);
     scene->components.kinetics[entity] = (CKinetic)
     {
-        .velocity = Vector2Scale(direction, speed),
+        .velocity = Vector2Scale(context.direction, speed),
         .acceleration = Vector2Create(0, 15),
     };
 

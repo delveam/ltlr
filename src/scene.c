@@ -51,6 +51,20 @@ usize SceneAllocateEntity(Scene* self)
     return next;
 }
 
+void SceneDeferCreateEntity(Scene* self, const ECreator creator)
+{
+    DequePushFront(&self->entityManager.deferredAllocations, &creator);
+}
+
+void SceneCreateEntities(Scene* self)
+{
+    while (DequeGetSize(&self->entityManager.deferredAllocations) > 0)
+    {
+        const ECreator* creator = (ECreator*) DequePopFront(&self->entityManager.deferredAllocations);
+        creator->createFn(self, &creator->context);
+    }
+}
+
 void SceneDeferDeallocateEntity(Scene* self, const usize entity)
 {
     DequePushFront(&self->entityManager.deferredDeallocations, &entity);
@@ -319,6 +333,7 @@ static void SceneStart(Scene* self)
     {
         self->entityManager.nextFreshEntityIndex = 0;
         self->entityManager.deferredDeallocations = DequeCreate(MAX_ENTITIES, sizeof(usize));
+        self->entityManager.deferredAllocations = DequeCreate(MAX_ENTITIES, sizeof(ECreator));
         self->entityManager.recycledEntityIndices = DequeCreate(MAX_ENTITIES, sizeof(usize));
     }
 
@@ -343,7 +358,16 @@ static void SceneStart(Scene* self)
             {
                 Rectangle collider = self->segments[i].colliders[j];
 
-                ECreateBlock(self, offset.x + collider.x, offset.y + collider.y, collider.width, collider.height);
+                ECreateBlock(self, &(ECreatorContext)
+                {
+                    .block = (EBlockContext)
+                    {
+                        .x = offset.x + collider.x,
+                        .y = offset.y + collider.y,
+                        .width = collider.width,
+                        .height = collider.height
+                    }
+                });
             }
 
             offset.x += self->segments[i].bounds.width;
@@ -351,11 +375,41 @@ static void SceneStart(Scene* self)
     }
 
     // TODO(thismarvin): Put this into level.json somehow...
-    self->player = ECreatePlayer(self, 16 * 1, 16 * - 4);
+    self->player = ECreatePlayer(self, &(ECreatorContext)
+    {
+        .player = (EPlayerContext)
+        {
+            .x = 16 * 1,
+            .y = 16 * -4,
+        }
+    });
 
-    ECreateWalker(self, 16 * 16, 8 * 16);
-    ECreateWalker(self, 16 * 16, 0 * 16);
-    ECreateWalker(self, 16 * 16, 4 * 16);
+    ECreateWalker(self, &(ECreatorContext)
+    {
+        .walker = (EWalkerContext)
+        {
+            .x = 16 * 16,
+            .y = 8 * 16,
+        }
+    });
+
+    ECreateWalker(self, &(ECreatorContext)
+    {
+        .walker = (EWalkerContext)
+        {
+            .x = 16 * 16,
+            .y = 0 * 16,
+        }
+    });
+
+    ECreateWalker(self, &(ECreatorContext)
+    {
+        .walker = (EWalkerContext)
+        {
+            .x = 16 * 16,
+            .y = 4 * 16,
+        }
+    });
 }
 
 void SceneInit(Scene* self)
@@ -378,6 +432,8 @@ void SceneUpdate(Scene* self)
     {
         self->debugging = !self->debugging;
     }
+
+    SceneCreateEntities(self);
 
     for (usize i = 0; i < SceneGetEntityCount(self); ++i)
     {
@@ -680,6 +736,7 @@ void SceneReset(Scene* self)
 {
     DequeDestroy(&self->entityManager.recycledEntityIndices);
     DequeDestroy(&self->entityManager.deferredDeallocations);
+    DequeDestroy(&self->entityManager.deferredAllocations);
     DequeDestroy(&self->eventManager.recycledEventIndices);
 
     SceneStart(self);
@@ -696,6 +753,7 @@ void SceneDestroy(Scene* self)
 
     DequeDestroy(&self->entityManager.recycledEntityIndices);
     DequeDestroy(&self->entityManager.deferredDeallocations);
+    DequeDestroy(&self->entityManager.deferredAllocations);
     DequeDestroy(&self->eventManager.recycledEventIndices);
 
     UnloadRenderTexture(self->backgroundLayer);

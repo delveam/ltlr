@@ -2,10 +2,11 @@
 
 #include "common.h"
 #include "components.h"
+#include "deque.h"
+#include "entity_creator.h"
 #include "events.h"
 #include "input.h"
 #include "level_segment.h"
-#include "deque.h"
 
 #define MAX_ENTITIES 1024
 
@@ -28,6 +29,7 @@ typedef struct
 typedef struct
 {
     Deque deferredDeallocations;
+    Deque deferredAllocations;
     // The next available index in the Components struct that has not been used before.
     usize nextFreshEntityIndex;
     // A stack of indices in the Components struct that are not currently allocated but were
@@ -45,7 +47,9 @@ typedef struct
     Deque recycledEventIndices;
 } EventManager;
 
-typedef struct
+typedef struct Scene Scene;
+
+struct Scene
 {
     Components components;
     EntityManager entityManager;
@@ -64,13 +68,15 @@ typedef struct
     RenderTexture2D foregroundLayer;
     // TODO(thismarvin): Should this exist in Scene?
     InputHandler input;
-} Scene;
+};
 
 void SceneInit(Scene* self);
 Components* SceneGetComponents(const Scene* self);
 void SceneEnableComponent(Scene* self, const usize entity, const usize tag);
 void SceneDisableComponent(Scene* self, const usize entity, const usize tag);
 usize SceneAllocateEntity(Scene* self);
+void SceneDeferCreateEntity(Scene* self, const ECreator creator);
+void SceneCreateEntities(Scene* self);
 void SceneDeferDeallocateEntity(Scene* self, const usize entity);
 void SceneFlushEntities(Scene* self);
 usize SceneGetEntityCount(const Scene* self);
