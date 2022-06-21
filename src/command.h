@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../common.h"
-#include "components.h"
+#include "./ecs/components.h"
+#include "common.h"
 
 typedef struct
 {
