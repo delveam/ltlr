@@ -69,7 +69,7 @@ void SceneSubmitCommand(Scene* self, Command command);
 void SceneExecuteCommands(Scene* self);
 void SceneUpdate(Scene* self);
 void SceneDraw(const Scene* self);
-void SceneReset(Scene* self);
+void SceneDeferReset(Scene* self);
 void SceneDestroy(Scene* self);
 
 #define SCENE_GET_COMPONENT(mScene, mValue, mEntity) _Generic((mValue), \

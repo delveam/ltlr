@@ -63,3 +63,11 @@ Command CommandCreateDisableComponent(const usize entity, const u64 componentTag
         },
     };
 }
+
+Command CommandCreateResetScene(void)
+{
+    return (Command)
+    {
+        .type = CT_RESET_SCENE,
+    };
+}

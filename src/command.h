@@ -40,6 +40,7 @@ typedef enum
     CT_DEALLOCATE_ENTITY,
     CT_ENABLE_COMPONENT,
     CT_DISABLE_COMPONENT,
+    CT_RESET_SCENE,
 } CommandType;
 
 typedef struct
@@ -60,3 +61,4 @@ Command CommandCreateSetComponent(usize entity, const Component* component);
 Command CommandCreateDeallocateEntity(usize entity);
 Command CommandCreateEnableComponent(usize entity, u64 componentTag);
 Command CommandCreateDisableComponent(usize entity, u64 componentTag);
+Command CommandCreateResetScene(void);

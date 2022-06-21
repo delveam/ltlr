@@ -15,6 +15,8 @@ typedef struct
 
 typedef void (*RenderFn)(const RenderFnParams*);
 
+static void SceneStart(Scene* self);
+
 void SceneDeferEnableComponent(Scene* self, const usize entity, const usize tag)
 {
     SceneSubmitCommand(self, CommandCreateEnableComponent(entity, tag));
@@ -184,6 +186,14 @@ void SceneExecuteRemoveComponent(Scene* self, const CommandDisableComponent* rem
     self->components.tags[removeCommand->entity] &= ~removeCommand->componentTag;
 }
 
+void SceneExecuteResetScene(Scene* self)
+{
+    DequeDestroy(&self->commands);
+    DequeDestroy(&self->m_entityManager.m_recycledEntityIndices);
+
+    SceneStart(self);
+}
+
 void SceneExecuteCommands(Scene* self)
 {
     Deque* commands = &self->commands;
@@ -221,6 +231,12 @@ void SceneExecuteCommands(Scene* self)
             case CT_DISABLE_COMPONENT:
             {
                 SceneExecuteRemoveComponent(self, &command->disableComponent);
+                break;
+            }
+
+            case CT_RESET_SCENE:
+            {
+                SceneExecuteResetScene(self);
                 break;
             }
 
@@ -518,7 +534,7 @@ static void SceneCheckEndCondition(Scene* self)
 
     if (distance > CTX_VIEWPORT_WIDTH * 0.5f)
     {
-        SceneReset(self);
+        SceneDeferReset(self);
     }
 }
 
@@ -819,12 +835,9 @@ void SceneDraw(const Scene* self)
     SceneDrawLayers(self);
 }
 
-void SceneReset(Scene* self)
+void SceneDeferReset(Scene* self)
 {
-    DequeDestroy(&self->commands);
-    DequeDestroy(&self->m_entityManager.m_recycledEntityIndices);
-
-    SceneStart(self);
+    SceneSubmitCommand(self, CommandCreateResetScene());
 }
 
 void SceneDestroy(Scene* self)
