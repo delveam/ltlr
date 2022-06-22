@@ -202,6 +202,19 @@ void SceneExecuteCommands(Scene* self)
     {
         const Command* command = &DEQUE_GET_UNCHECKED(commands, Command, i);
 
+        if (command->type == CT_RESET_SCENE)
+        {
+            SceneExecuteResetScene(self);
+            SceneExecuteCommands(self);
+
+            return;
+        }
+    }
+
+    for (usize i = 0; i < DequeGetSize(commands); ++i)
+    {
+        const Command* command = &DEQUE_GET_UNCHECKED(commands, Command, i);
+
         switch (command->type)
         {
             case CT_SET_TAG:
@@ -236,7 +249,7 @@ void SceneExecuteCommands(Scene* self)
 
             case CT_RESET_SCENE:
             {
-                SceneExecuteResetScene(self);
+                assert(false);
                 break;
             }
 
@@ -548,7 +561,6 @@ void SceneUpdate(Scene* self)
     }
 
     SceneExecuteCommands(self);
-    SceneCheckEndCondition(self);
 
     for (usize i = 0; i < SceneGetEntityCount(self); ++i)
     {
@@ -567,6 +579,8 @@ void SceneUpdate(Scene* self)
 
         FogUpdate(self, i);
     }
+
+    SceneCheckEndCondition(self);
 }
 
 // Return a Rectangle that is within the scene's bounds and centered on a given entity.
