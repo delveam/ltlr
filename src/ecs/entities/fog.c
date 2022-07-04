@@ -11,6 +11,11 @@
     .y = -(FOG_HEIGHT - CTX_VIEWPORT_HEIGHT) * 0.5f, \
 }
 
+static const f32 fogMoveSpeed = 50;
+// TODO(austin0209): move this somewhere else maybe?
+static f32 particleSpawnTimer = 0;
+static f32 particleSpawnDuration = 3;
+
 EntityBuilder FogCreate(void)
 {
     Deque components = DEQUE_OF(Component);
@@ -42,7 +47,7 @@ EntityBuilder FogCreate(void)
 
     ADD_COMPONENT(CKinetic, ((CKinetic)
     {
-        .velocity = Vector2Create(50, 0),
+        .velocity = Vector2Create(fogMoveSpeed, 0),
         .acceleration = VECTOR2_ZERO,
     }));
 
@@ -60,16 +65,64 @@ EntityBuilder FogCreate(void)
 
 void FogUpdate(Scene* scene, const usize entity)
 {
-    const u64 dependencies = TAG_FOG | TAG_POSITION;
+    const u64 dependencies = TAG_FOG | TAG_POSITION | TAG_KINETIC;
 
     if (!SceneEntityHasDependencies(scene, entity, dependencies))
     {
         return;
     }
 
-    CPosition* position = SCENE_GET_COMPONENT_PTR(scene, position, entity);
+    assert(SceneEntityHasDependencies(scene, scene->player, TAG_POSITION));
 
-    position->value.y = sinf(position->value.x * CTX_DT) * 48 + FOG_INITIAL_POSITION.y;
+    const CPosition* playerPosition = SCENE_GET_COMPONENT_PTR(scene, playerPosition, scene->player);
+    CPosition* position = SCENE_GET_COMPONENT_PTR(scene, position, entity);
+    CKinetic* kinetic = SCENE_GET_COMPONENT_PTR(scene, kinetic, entity);
+
+    if (position->value.x < 0 && playerPosition->value.x < CTX_VIEWPORT_WIDTH)
+    {
+        kinetic->velocity = VECTOR2_ZERO;
+        return;
+    }
+
+    kinetic->velocity = (Vector2)
+    {
+        .x = fogMoveSpeed,
+        .y = cosf(position->value.x * CTX_DT) * 32,
+    };
+
+    particleSpawnTimer += CTX_DT;
+
+    if (particleSpawnTimer >= particleSpawnDuration)
+    {
+        static const i32 spawnCount = 32;
+        static const i32 spawnDomain = 6;
+        static const i32 spawnRange = 12;
+
+        static const i32 minSize = 16;
+        static const i32 maxSize = 28;
+
+        static const i32 minLifetime = 2;
+        static const i32 maxLifetime = 10;
+
+        for (i32 i = 0; i < spawnCount; i++)
+        {
+            const Vector2 spawnPosition = (Vector2)
+            {
+                .x = position->value.x + GetRandomValue(0, spawnDomain),
+                .y = (1.0f * i / spawnCount) * FOG_HEIGHT +
+                     GetRandomValue(-spawnRange, spawnRange),
+            };
+
+            const EntityBuilder particleBuilder = FogBreathingParticleCreate(
+                    spawnPosition,
+                    GetRandomValue(minSize, maxSize),
+                    GetRandomValue(minLifetime, maxLifetime));
+
+            SceneDeferAddEntity(scene, particleBuilder);
+        }
+
+        particleSpawnTimer = 0;
+    }
 }
 
 void FogDraw(const Scene* scene, const usize entity)
@@ -97,7 +150,7 @@ void FogDraw(const Scene* scene, const usize entity)
 
     while (currentCenter.y <= position->value.y + dimension->height)
     {
-        DrawCircle(currentCenter.x, currentCenter.y, radius, color->value);
+        DrawCircleV(currentCenter, radius, color->value);
         currentCenter.y += radius * 1.5f;
     }
 }
