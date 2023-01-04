@@ -106,4 +106,6 @@ void MenuDraw(const Menu* self)
 void MenuDestroy(Menu* self)
 {
     EventHandlerDestroy(&self->onReady);
+
+    InputProfileDestroy(&self->defaultMenuProfile);
 }

@@ -113,6 +113,7 @@ int main(void)
 
     MenuDestroy(&menuScene);
     SceneDestroy(&scene);
+    AtlasDestroy(&atlas);
 
     CloseAudioDevice();
     CloseWindow();
