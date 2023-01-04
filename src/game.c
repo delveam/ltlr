@@ -1,5 +1,8 @@
+#include "./ecs/events.h"
+#include "atlas.h"
 #include "common.h"
 #include "context.h"
+#include "menu.h"
 #include "scene.h"
 #include <math.h>
 
@@ -8,6 +11,12 @@
 #endif
 
 #define FRAMERATE_SAMPLING_FREQUENCY 0.1f
+
+typedef enum
+{
+    SCENE_STATE_MENU,
+    SCENE_STATE_ACTION,
+} SceneState;
 
 static void Initialize(void);
 static void Update(void);
@@ -26,6 +35,10 @@ static f64 averageFps;
 
 static bool debugging;
 
+static Atlas atlas;
+
+static SceneState sceneState;
+static Menu menuScene;
 static Scene scene;
 
 static void Timestep(void)
@@ -98,6 +111,7 @@ int main(void)
 
 #endif
 
+    MenuDestroy(&menuScene);
     SceneDestroy(&scene);
 
     CloseAudioDevice();
@@ -106,11 +120,23 @@ int main(void)
     return 0;
 }
 
+static void OnRaiseMenuReady(UNUSED const void* args)
+{
+    sceneState = SCENE_STATE_ACTION;
+}
+
 static void Initialize(void)
 {
     ContextInit();
 
+    atlas = AtlasCreate("./content/atlas.png");
+
+    sceneState = SCENE_STATE_MENU;
+
+    MenuInit(&menuScene, &atlas);
     SceneInit(&scene);
+
+    EventHandlerSubscribe(&menuScene.onReady, OnRaiseMenuReady);
 }
 
 static void Update(void)
@@ -120,7 +146,20 @@ static void Update(void)
         debugging = !debugging;
     }
 
-    SceneUpdate(&scene);
+    switch (sceneState)
+    {
+        case SCENE_STATE_MENU:
+        {
+            MenuUpdate(&menuScene);
+            break;
+        }
+
+        case SCENE_STATE_ACTION:
+        {
+            SceneUpdate(&scene);
+            break;
+        }
+    }
 }
 
 static void DrawDebugInformation(void)
@@ -180,7 +219,20 @@ static void DrawDebugInformation(void)
 
 static void Draw(void)
 {
-    SceneDraw(&scene);
+    switch (sceneState)
+    {
+        case SCENE_STATE_MENU:
+        {
+            MenuDraw(&menuScene);
+            break;
+        }
+
+        case SCENE_STATE_ACTION:
+        {
+            SceneDraw(&scene);
+            break;
+        }
+    }
 
     DrawDebugInformation();
 }
