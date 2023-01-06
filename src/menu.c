@@ -5,41 +5,6 @@
 #include "sprites_generated.h"
 #include <raymath.h>
 
-typedef struct
-{
-    Menu* scene;
-    Rectangle cameraBounds;
-} RenderFnParams;
-
-typedef void (*RenderFn)(const RenderFnParams*);
-
-static Rectangle RectangleFromRenderTexture(const RenderTexture renderTexture)
-{
-    return (Rectangle)
-    {
-        .x = 0,
-        .y = 0,
-        .width = renderTexture.texture.width,
-        .height = renderTexture.texture.height,
-    };
-}
-
-// Returns the maximum value the dimensions of a given region can be multiplied by and still fit
-// within a given container.
-static f32 CalculateZoom(const Rectangle region, const Rectangle container)
-{
-    // Assume we need letterboxing.
-    f32 zoom = container.width / region.width;
-
-    // Check if pillarboxing is more appropriate.
-    if (region.height * zoom > container.height)
-    {
-        zoom = container.height / region.height;
-    }
-
-    return zoom;
-}
-
 void MenuInit(Menu* self, const Atlas* atlas)
 {
     self->atlas = (Atlas*)atlas;
@@ -80,41 +45,6 @@ void MenuInit(Menu* self, const Atlas* atlas)
 
     // Setup RenderTargets.
     {
-        self->trueResolution = (Rectangle)
-        {
-            .x = 0,
-            .y = 0,
-            .width = CTX_VIEWPORT_WIDTH,
-            .height = CTX_VIEWPORT_HEIGHT,
-        };
-
-        // TODO(thismarvin): Expose a "Render Resolution" option.
-
-        // Use the monitor's resolution as the default render resolution.
-        const int currentMonitor = GetCurrentMonitor();
-        int width = GetMonitorWidth(currentMonitor);
-        int height = GetMonitorHeight(currentMonitor);
-
-        // The following is always true for every platform except desktop.
-        if (width == 0 || height == 0)
-        {
-            width = DEFAULT_WINDOW_WIDTH;
-            height = DEFAULT_WINDOW_HEIGHT;
-        }
-
-        const Rectangle renderResolution = (Rectangle)
-        {
-            .x = 0,
-            .y = 0,
-            .width = width,
-            .height = height,
-        };
-
-        f32 zoom = CalculateZoom(self->trueResolution, renderResolution);
-
-        // Ensure that the render resolution uses integer scaling.
-        zoom = floor(zoom);
-
         self->rootLayer = LoadRenderTexture(1, 1);
         self->targetLayer = LoadRenderTexture(CTX_VIEWPORT_WIDTH, CTX_VIEWPORT_HEIGHT);
     }
@@ -128,45 +58,8 @@ void MenuUpdate(Menu* self)
     {
         InputHandlerConsume(&self->input, "select");
 
-        EventHandlerRaise(&self->onReady, 0);
+        EventHandlerRaise(&self->onReady, NULL);
     }
-}
-
-static void SceneRenderLayer
-(
-    const RenderTexture* renderTexture,
-    const RenderFn fn,
-    const RenderFnParams* params
-)
-{
-    const Rectangle bounds = RectangleFromRenderTexture(*renderTexture);
-    const f32 zoom = CalculateZoom(params->scene->trueResolution, bounds);
-
-    const Vector2 cameraCenter = (Vector2)
-    {
-        .x = params->cameraBounds.x + CTX_VIEWPORT_WIDTH * 0.5,
-        .y = params->cameraBounds.y + CTX_VIEWPORT_HEIGHT * 0.5,
-    };
-
-    const Camera2D camera = (Camera2D)
-    {
-        .zoom = zoom,
-        .offset = Vector2Scale(cameraCenter, -zoom),
-        .target = (Vector2)
-        {
-            .x = -CTX_VIEWPORT_WIDTH * 0.5,
-            .y = -CTX_VIEWPORT_HEIGHT * 0.5,
-        },
-        .rotation = 0,
-    };
-
-    BeginTextureMode(*renderTexture);
-    BeginMode2D(camera);
-    {
-        fn(params);
-    }
-    EndMode2D();
-    EndTextureMode();
 }
 
 static void RenderRootLayer(UNUSED const RenderFnParams* params)
@@ -176,6 +69,8 @@ static void RenderRootLayer(UNUSED const RenderFnParams* params)
 
 static void RenderTargetLayer(const RenderFnParams* params)
 {
+    const Menu* scene = (Menu*)params->scene;
+
     ClearBackground(COLOR_TRANSPARENT);
 
     const Rectangle intramural = (Rectangle)
@@ -193,32 +88,24 @@ static void RenderTargetLayer(const RenderFnParams* params)
         .reflection = REFLECTION_NONE,
         .tint = COLOR_WHITE,
     };
-    AtlasDraw(params->scene->atlas, &drawParams);
+    AtlasDraw(scene->atlas, &drawParams);
 }
 
 void MenuDraw(const Menu* self)
 {
     const RenderFnParams stationaryCameraParams = (RenderFnParams)
     {
-        .scene = (Menu*)self,
-        .cameraBounds = (Rectangle) { 0, 0, CTX_VIEWPORT_WIDTH, CTX_VIEWPORT_HEIGHT },
+        .scene = (void*)self,
+        .cameraBounds = CTX_VIEWPORT,
     };
 
-    SceneRenderLayer(&self->rootLayer, RenderRootLayer, &stationaryCameraParams);
-    SceneRenderLayer(&self->targetLayer, RenderTargetLayer, &stationaryCameraParams);
+    RenderLayer(&self->rootLayer, RenderRootLayer, &stationaryCameraParams);
+    RenderLayer(&self->targetLayer, RenderTargetLayer, &stationaryCameraParams);
 
     {
-        BeginDrawing();
+        const Rectangle screenResolution = GetScreenResolution();
 
-        const Rectangle screenResolution = (Rectangle)
-        {
-            .x = 0,
-            .y = 0,
-            .width = GetScreenWidth(),
-            .height = GetScreenHeight(),
-        };
-
-        f32 zoom = CalculateZoom(self->trueResolution, screenResolution);
+        f32 zoom = CalculateZoom(CTX_VIEWPORT, screenResolution);
 
         // TODO(thismarvin): Expose "preferIntegerScaling" option.
         // Prefer integer scaling.
@@ -241,23 +128,26 @@ void MenuDraw(const Menu* self)
             .y = floor(height * 0.5),
         };
 
-        ClearBackground(BLACK);
-
-        // Draw root layer.
+        BeginDrawing();
         {
-            Rectangle source = RectangleFromRenderTexture(self->rootLayer);
-            source.height *= -1;
+            ClearBackground(COLOR_BLACK);
 
-            DrawTexturePro(self->rootLayer.texture, source, destination, origin, 0, WHITE);
+            const RenderTexture renderTextures[2] =
+            {
+                self->rootLayer,
+                self->targetLayer,
+            };
+
+            for (usize i = 0; i < 5; ++i)
+            {
+                const RenderTexture* renderTexture = &renderTextures[i];
+
+                Rectangle source = RectangleFromRenderTexture(renderTexture);
+                source.height *= -1;
+
+                DrawTexturePro(renderTexture->texture, source, destination, origin, 0, COLOR_WHITE);
+            }
         }
-        // Draw target layer.
-        {
-            Rectangle source = RectangleFromRenderTexture(self->targetLayer);
-            source.height *= -1;
-
-            DrawTexturePro(self->targetLayer.texture, source, destination, origin, 0, WHITE);
-        }
-
         EndDrawing();
     }
 }
@@ -266,6 +156,7 @@ void MenuDestroy(Menu* self)
 {
     EventHandlerDestroy(&self->onReady);
 
+    UnloadRenderTexture(self->rootLayer);
     UnloadRenderTexture(self->targetLayer);
 
     InputProfileDestroy(&self->defaultMenuProfile);

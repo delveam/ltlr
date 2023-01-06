@@ -11,8 +11,6 @@ typedef struct
     InputHandler input;
     EventHandler onReady;
     Atlas* atlas;
-
-    Rectangle trueResolution;
     RenderTexture2D rootLayer;
     RenderTexture2D targetLayer;
 } Menu;
