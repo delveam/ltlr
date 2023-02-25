@@ -124,14 +124,16 @@ void SceneDefer(Scene* self, const OnDefer fn, const void* params)
 
 void SceneDeferDeallocateEntity(Scene* self, const usize entity)
 {
-	DeallocateEntityParams* params = malloc(sizeof(DeallocateEntityParams));
+	DeallocateEntityParams* params =
+		ArenaAllocatorTake(&self->arenaAllocator, sizeof(DeallocateEntityParams));
 	params->entity = entity;
 	SceneDefer(self, SceneDeallocateEntity, params);
 }
 
 void SceneDeferEnableTag(Scene* self, const usize entity, const u64 tag)
 {
-	EnableComponentParams* params = malloc(sizeof(EnableComponentParams));
+	EnableComponentParams* params =
+		ArenaAllocatorTake(&self->arenaAllocator, sizeof(EnableComponentParams));
 	params->entity = entity;
 	params->tag = tag;
 	SceneDefer(self, SceneEnableComponent, params);
@@ -139,7 +141,8 @@ void SceneDeferEnableTag(Scene* self, const usize entity, const u64 tag)
 
 void SceneDeferDisableTag(Scene* self, const usize entity, const u64 tag)
 {
-	DisableComponentParams* params = malloc(sizeof(DisableComponentParams));
+	DisableComponentParams* params =
+		ArenaAllocatorTake(&self->arenaAllocator, sizeof(DisableComponentParams));
 	params->entity = entity;
 	params->tag = tag;
 	SceneDefer(self, SceneDisableComponent, params);
@@ -147,7 +150,7 @@ void SceneDeferDisableTag(Scene* self, const usize entity, const u64 tag)
 
 void SceneDeferSetTag(Scene* self, const usize entity, const u64 tag)
 {
-	SetTagParams* params = malloc(sizeof(SetTagParams));
+	SetTagParams* params = ArenaAllocatorTake(&self->arenaAllocator, sizeof(SetTagParams));
 	params->entity = entity;
 	params->tag = tag;
 	SceneDefer(self, SceneSetTag, params);
@@ -160,10 +163,9 @@ static void SceneFlush(Scene* self)
 		SceneDeferParams* params = &DEQUE_GET_UNCHECKED(&self->deferred, SceneDeferParams, i);
 
 		params->fn(self, params->params);
-
-		free(params->params);
 	}
 
+	ArenaAllocatorFlush(&self->arenaAllocator);
 	DequeClear(&self->deferred);
 }
 
@@ -523,7 +525,7 @@ static void ScenePopulateLevel(Scene* self)
 			.height = 16 * (2 + 4),
 		};
 
-		BlockBuilder* builder = malloc(sizeof(BlockBuilder));
+		BlockBuilder* builder = ArenaAllocatorTake(&self->arenaAllocator, sizeof(BlockBuilder));
 		builder->entity = SceneAllocateEntity(self);
 		builder->aabb = aabb;
 		builder->resolutionSchema = RESOLVE_ALL;
@@ -533,7 +535,7 @@ static void ScenePopulateLevel(Scene* self)
 
 	{
 		self->player = SceneAllocateEntity(self);
-		PlayerBuilder* builder = malloc(sizeof(PlayerBuilder));
+		PlayerBuilder* builder = ArenaAllocatorTake(&self->arenaAllocator, sizeof(PlayerBuilder));
 		builder->entity = self->player;
 		builder->handle = 0;
 		builder->x = 16 * 5;
@@ -543,14 +545,14 @@ static void ScenePopulateLevel(Scene* self)
 
 	{
 		self->fog = SceneAllocateEntity(self);
-		FogBuilder* builder = malloc(sizeof(FogBuilder));
+		FogBuilder* builder = ArenaAllocatorTake(&self->arenaAllocator, sizeof(FogBuilder));
 		builder->entity = self->fog;
 		SceneDefer(self, FogBuild, builder);
 	}
 
 	{
 		self->lakitu = SceneAllocateEntity(self);
-		LakituBuilder* builder = malloc(sizeof(LakituBuilder));
+		LakituBuilder* builder = ArenaAllocatorTake(&self->arenaAllocator, sizeof(LakituBuilder));
 		builder->entity = self->lakitu;
 		SceneDefer(self, LakituBuild, builder);
 	}
@@ -606,14 +608,9 @@ static void SceneResetEcs(Scene* self)
 	// We don't have to zero out each component array; just resetting the tags is sufficient.
 	memset(&self->components.tags, 0, sizeof(u64) * MAX_ENTITIES);
 
-	// Deferred function arguments use malloc; it's our responsibility to free them.
+	// Clear any deferred commands.
 	{
-		for (usize i = 0; i < DequeGetSize(&self->deferred); ++i)
-		{
-			SceneDeferParams* params = &DEQUE_GET_UNCHECKED(&self->deferred, SceneDeferParams, i);
-			free(params->params);
-		}
-
+		ArenaAllocatorFlush(&self->arenaAllocator);
 		DequeClear(&self->deferred);
 	}
 
@@ -700,6 +697,8 @@ void SceneInit(Scene* self)
 	self->director = DIRECTOR_STATE_ENTRANCE;
 	self->fader = FaderDefault();
 	self->fader.easer.ease = EaseInOutQuad;
+
+	self->arenaAllocator = ArenaAllocatorCreate((usize)(1024 * 4));
 
 	SceneReset(self);
 }
@@ -1366,6 +1365,8 @@ void SceneDestroy(Scene* self)
 	DequeDestroy(&self->m_entityManager.m_recycledEntityIndices);
 	DequeDestroy(&self->treePositionsBack);
 	DequeDestroy(&self->treePositionsFront);
+
+	ArenaAllocatorDestroy(&self->arenaAllocator);
 
 	UnloadRenderTexture(self->treeTexture);
 	UnloadRenderTexture(self->backgroundLayer);

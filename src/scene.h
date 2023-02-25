@@ -2,6 +2,7 @@
 
 #include "./collections/deque.h"
 #include "./ecs/components.h"
+#include "./utils/arena_allocator.h"
 #include "atlas.h"
 #include "common.h"
 #include "fader.h"
@@ -101,6 +102,7 @@ struct Scene
 	Deque deferred;
 	f64 elapsedTime;
 	Rng rng;
+	ArenaAllocator arenaAllocator;
 };
 
 void SceneInit(Scene* self);
