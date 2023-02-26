@@ -2,6 +2,7 @@
 
 #include "../context.h"
 #include "../palette/p8.h"
+#include "./entities/common.h"
 #include "components.h"
 
 #include <assert.h>
@@ -23,6 +24,7 @@ typedef struct
 	Vector2 delta;
 	u8 step;
 	OnResolution onResolution;
+	Deque queryResults;
 } SimulateCollisionOnAxisParams;
 
 typedef struct
@@ -33,6 +35,7 @@ typedef struct
 	Rectangle previousAabb;
 	CCollider* collider;
 	OnResolution onResolution;
+	Deque queryResults;
 } AdvancedCollisionParams;
 
 void SSmoothUpdate(Scene* scene, const usize entity)
@@ -120,8 +123,10 @@ static SimulateCollisionOnAxisResult SimulateCollisionOnAxis(
 		simulatedAabb.x += params->step * direction.x;
 		simulatedAabb.y += params->step * direction.y;
 
-		for (usize i = 0; i < SceneGetTotalAllocatedEntities(params->scene); ++i)
+		for (usize j = 0; j < DequeGetSize(&params->queryResults); ++j)
 		{
+			const usize i = DEQUE_GET_UNCHECKED(&params->queryResults, usize, j);
+
 			const u64 dependencies = TAG_POSITION | TAG_DIMENSION | TAG_COLLIDER;
 
 			if (i == params->entity || !SceneEntityHasDependencies(params->scene, i, dependencies))
@@ -274,6 +279,7 @@ static Rectangle AdvancedCollision(const AdvancedCollisionParams* params)
 			.delta = xDelta,
 			.step = step,
 			.onResolution = params->onResolution,
+			.queryResults = params->queryResults,
 		};
 
 		const SimulateCollisionOnAxisResult result = SimulateCollisionOnAxis(&onAxisParams);
@@ -304,6 +310,7 @@ static Rectangle AdvancedCollision(const AdvancedCollisionParams* params)
 			.delta = yDelta,
 			.step = step,
 			.onResolution = params->onResolution,
+			.queryResults = params->queryResults,
 		};
 
 		const SimulateCollisionOnAxisResult result = SimulateCollisionOnAxis(&onAxisParams);
@@ -353,6 +360,35 @@ void SCollisionUpdate(Scene* scene, const usize entity)
 		.width = dimension->width,
 		.height = dimension->height,
 	};
+
+	// TODO(thismarvin): Does our new Quadtree require padding when querying?
+	const Region queryRegion = (Region) {
+		.x = ceilf(MIN(RectangleLeft(previousAabb), RectangleLeft(currentAabb))),
+		.y = ceilf(MIN(RectangleTop(previousAabb), RectangleTop(currentAabb))),
+		.width = ceilf(MAX(RectangleRight(previousAabb), RectangleRight(currentAabb))),
+		.height = ceilf(MAX(RectangleBottom(previousAabb), RectangleBottom(currentAabb))),
+	};
+
+	Deque queryResultsDynamic = QuadtreeQuery(scene->quadtreeDynamic, queryRegion);
+	Deque queryResultsStatic = QuadtreeQuery(scene->quadtreeStatic, queryRegion);
+
+	const usize capacity = DequeGetSize(&queryResultsDynamic) + DequeGetSize(&queryResultsStatic);
+	Deque queryResults = DEQUE_WITH_CAPACITY(usize, capacity);
+
+	for (usize i = 0; i < DequeGetSize(&queryResultsDynamic); ++i)
+	{
+		const usize entry = DEQUE_GET_UNCHECKED(&queryResultsDynamic, usize, i);
+
+		DequePushBack(&queryResults, &entry);
+	}
+
+	for (usize i = 0; i < DequeGetSize(&queryResultsStatic); ++i)
+	{
+		const usize entry = DEQUE_GET_UNCHECKED(&queryResultsStatic, usize, i);
+
+		DequePushBack(&queryResults, &entry);
+	}
+
 	const AdvancedCollisionParams params = (AdvancedCollisionParams) {
 		.scene = scene,
 		.entity = entity,
@@ -360,8 +396,14 @@ void SCollisionUpdate(Scene* scene, const usize entity)
 		.previousAabb = previousAabb,
 		.collider = (CCollider*)collider,
 		.onResolution = collider->onResolution,
+		.queryResults = queryResults,
 	};
+
 	const Rectangle resolvedAabb = AdvancedCollision(&params);
+
+	DequeDestroy(&queryResultsDynamic);
+	DequeDestroy(&queryResultsStatic);
+	DequeDestroy(&queryResults);
 
 	position->value.x = resolvedAabb.x;
 	position->value.y = resolvedAabb.y;
@@ -392,8 +434,37 @@ void SPostCollisionUpdate(Scene* scene, const usize entity)
 		.height = dimension->height,
 	};
 
-	for (usize i = 0; i < SceneGetTotalAllocatedEntities(scene); ++i)
+	const Region queryRegion = (Region) {
+		.x = aabb.x,
+		.y = aabb.y,
+		.width = ceilf(aabb.width),
+		.height = ceilf(aabb.height),
+	};
+
+	Deque queryResultsDynamic = QuadtreeQuery(scene->quadtreeDynamic, queryRegion);
+	Deque queryResultsStatic = QuadtreeQuery(scene->quadtreeStatic, queryRegion);
+
+	const usize capacity = DequeGetSize(&queryResultsDynamic) + DequeGetSize(&queryResultsStatic);
+	Deque queryResults = DEQUE_WITH_CAPACITY(usize, capacity);
+
+	for (usize i = 0; i < DequeGetSize(&queryResultsDynamic); ++i)
 	{
+		const usize entry = DEQUE_GET_UNCHECKED(&queryResultsDynamic, usize, i);
+
+		DequePushBack(&queryResults, &entry);
+	}
+
+	for (usize i = 0; i < DequeGetSize(&queryResultsStatic); ++i)
+	{
+		const usize entry = DEQUE_GET_UNCHECKED(&queryResultsStatic, usize, i);
+
+		DequePushBack(&queryResults, &entry);
+	}
+
+	for (usize j = 0; j < DequeGetSize(&queryResults); ++j)
+	{
+		const usize i = DEQUE_GET_UNCHECKED(&queryResults, usize, j);
+
 		const u64 otherDependencies = TAG_POSITION | TAG_DIMENSION | TAG_COLLIDER;
 
 		if (i == entity || !SceneEntityHasDependencies(scene, i, otherDependencies))
@@ -433,6 +504,10 @@ void SPostCollisionUpdate(Scene* scene, const usize entity)
 			collider->onCollision(&onCollisionParams);
 		}
 	}
+
+	DequeDestroy(&queryResultsDynamic);
+	DequeDestroy(&queryResultsStatic);
+	DequeDestroy(&queryResults);
 }
 
 void SFleetingUpdate(Scene* scene, const usize entity)
